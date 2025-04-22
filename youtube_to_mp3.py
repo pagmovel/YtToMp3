@@ -3,6 +3,23 @@ import os
 import zipfile
 import requests
 from tqdm import tqdm
+import glob
+
+def find_ffmpeg_executables(ffmpeg_dir):
+    """Procura recursivamente pelos executáveis do FFmpeg em qualquer subdiretório"""
+    pattern = '**' + os.path.sep + '*ff*.exe' if os.name == 'nt' else '**' + os.path.sep + '*ff*'
+    matches = glob.glob(os.path.join(ffmpeg_dir, pattern), recursive=True)
+    return matches
+
+def get_ffmpeg_bin_dir():
+    """Retorna o diretório que contém os executáveis do FFmpeg"""
+    ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg')
+    executables = find_ffmpeg_executables(ffmpeg_dir)
+    
+    if executables:
+        # Pega o diretório do primeiro executável encontrado
+        return os.path.dirname(executables[0])
+    return ffmpeg_dir
 
 def download_ffmpeg():
     ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
@@ -29,18 +46,22 @@ def download_ffmpeg():
     
     print("Extraindo arquivos...")
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        for file in zip_ref.namelist():
-            if file.endswith(('.exe', '.dll')) and not file.startswith('_'):
-                zip_ref.extract(file, ffmpeg_dir)
+        zip_ref.extractall(ffmpeg_dir)
     
     os.remove(zip_path)
     print("FFmpeg instalado com sucesso!")
 
 def check_ffmpeg():
-    ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg')
-    required_files = ['ffmpeg.exe', 'ffplay.exe', 'ffprobe.exe']
+    executables = find_ffmpeg_executables(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg'))
+    required_names = ['ffmpeg', 'ffplay', 'ffprobe']
     
-    if not all(os.path.exists(os.path.join(ffmpeg_dir, file)) for file in required_files):
+    # Verifica se todos os executáveis necessários existem
+    has_all_required = all(
+        any(req in os.path.basename(exe).lower() for exe in executables)
+        for req in required_names
+    )
+    
+    if not has_all_required:
         print("FFmpeg não encontrado. Baixando...")
         download_ffmpeg()
 
@@ -48,7 +69,7 @@ def convert_to_mp3(links_file):
     if not os.path.exists('downloads'):
         os.makedirs('downloads')
 
-    ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg')
+    ffmpeg_bin_dir = get_ffmpeg_bin_dir()
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
@@ -57,7 +78,7 @@ def convert_to_mp3(links_file):
             'preferredquality': '320',
         }],
         'outtmpl': os.path.join('downloads', '%(title)s.%(ext)s'),
-        'ffmpeg_location': ffmpeg_dir
+        'ffmpeg_location': ffmpeg_bin_dir
     }
 
     try:
